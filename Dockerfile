@@ -1,5 +1,5 @@
-# 使用官方OpenJDK 25镜像
-FROM openjdk:25-jre-slim
+# 使用官方OpenJDK 8镜像
+FROM openjdk:8-jre-slim
 
 # 将jar包复制到镜像中
 COPY echoes/target/echoes-0.0.1-SNAPSHOT.jar app.jar
