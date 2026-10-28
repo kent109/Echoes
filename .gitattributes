@@ -1,0 +1,14 @@
+# 仓库内一律 LF，checkout 到工作树一律 CRLF
+* text=auto eol=crlf
+
+# 会被 Linux 容器/CI 消费的文件保持 LF，避免 \r 引发 bad interpreter
+*.sh text eol=lf
+Dockerfile text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+
+# 二进制文件不做换行符处理
+*.png binary
+*.jpg binary
+*.jar binary
+*.pdf binary
