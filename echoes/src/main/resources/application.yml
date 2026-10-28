@@ -4,3 +4,11 @@ server:
 spring:
   application:
     name: echoes
+  datasource:
+    url: jdbc:postgresql://localhost:5432/echoes
+    username: postgres
+    password: ${POSTGRES_PASSWORD}
+  jpa:
+    hibernate:
+      ddl-auto: update
+    open-in-view: false
