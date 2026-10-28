@@ -12,3 +12,16 @@ spring:
     hibernate:
       ddl-auto: update
     open-in-view: false
+  ai:
+    model:
+      chat: ${AI_CHAT_MODEL:openai}
+    chat:
+      memory:
+        repository:
+          jdbc:
+            initialize-schema: always
+    openai:
+      base-url: ${OPENAI_BASE_URL:https://open.bigmodel.cn/api/paas/v4}
+      api-key: ${OPENAI_API_KEY:}
+      chat:
+        model: ${OPENAI_MODEL:glm-4-flash}
