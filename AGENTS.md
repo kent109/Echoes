@@ -35,6 +35,14 @@ Windows 上设置方式：`setx OPENAI_API_KEY "..."`（只对之后新起的进
 
 写路径是整窗重插（`SELECT` 读旧窗口 → `DELETE` 该会话 → `INSERT` 全部），不是追加。后果有两个：同一 `conversationId` 并发请求会互相踩；流式端点被客户端中途断开时，实测只落 `USER` 一行、`ASSISTANT` 丢失，下次请求模型会看到两条连续的 user 消息且那段没答完的问题凭空消失。
 
+### 工具调用与记忆
+
+框架不会把工具交互写进记忆，两层都堵死了：`saveAll()` 过滤掉 `ToolResponseMessage` 和带 toolCalls 的 `AssistantMessage`；表只有 `content/type/timestamp/sequence_id/conversation_id`，没有 tool call id、工具名、入参列，读回来时 `MessageRowMapper` 对 `TOOL` 直接返回 `null`。挂不到记忆 advisor 上重试：`MessageChatMemoryAdvisor` 的 order 是 `Integer.MIN_VALUE+200`，`ToolCallingAdvisor` 是 `+300`，工具那一整轮发生在记忆 advisor 的视野之外，它的 `before/after` 只会看见 USER 和最终 ASSISTANT 文本。
+
+项目的做法是在工具层记账（`com.gemform.be.echoes.tool`）：`MemoryRecordingToolCallback` 执行完委托工具，把 `[tool] 名(入参) -> 结果` 作为 `AssistantMessage` 写进记忆，结果截断到 500 字符（记忆窗口会把每行原样回放给模型）。注册走 `MemoryRecordingTools.wrap(chatMemory, toolObject)`，先由 `MethodToolCallbackProvider` 拿到原始 callback 再逐个包装。工具清单在 `ChatClientConfiguration#chatToolCallbacks` 组装成一个 `ToolCallback[]` bean，`ChatClient` 自身不带默认工具——由 `ChatController` 按请求里的 `useTools`（缺省视为 true）决定这次 `.tools(...)` 挂不挂。清单是每轮请求都原样发给模型的，模型自己决定要不要发 tool_call，服务端不需要"判断要不要用工具"这种分支；真要把工具摘掉只有两种正当场景：调用方不该有某个能力（这时权限要由服务端根据身份判定，不能信客户端传来的 `useTools`），或工具数量多到 schema 挤占上下文。注意同一个名字既进 `defaultTools` 又出现在单次 `.tools(...)` 会在构建请求时抛 `IllegalStateException: Multiple tools with the same name`，直接 500。
+
+会话 id 从 `ToolContext` 取，键沿用 `ChatMemory.CONVERSATION_ID`，必须由调用方 `.toolContext(Map)` 显式传——`DefaultToolCallingManager.buildToolContext()` 只读 `ToolCallingChatOptions.getToolContext()`，advisor 参数不会合并进来。这个键会原样进 `ToolContext` 但不会出到网络请求：`OpenAiChatOptions` 只在 `mutate()` 复制它，不进 `ChatCompletionRequest`。要是以后需要把记忆里的工具摘要与真实 `TOOL` 行对上，就得自配键名。
+
 ## 运行时约束
 
 框架是 Spring Boot 4.1.2 + Java 25，其自身 jar 是 class file 61（最低 JRE 17），这一点无法通过编译参数绕过。

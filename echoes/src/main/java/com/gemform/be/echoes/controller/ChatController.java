@@ -1,8 +1,9 @@
 package com.gemform.be.echoes.controller;
 
 import org.springframework.ai.chat.client.ChatClient;
-import org.springframework.ai.chat.client.advisor.MessageChatMemoryAdvisor;
 import org.springframework.ai.chat.memory.ChatMemory;
+import org.springframework.ai.tool.ToolCallback;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -23,23 +24,25 @@ public class ChatController {
 
     private final ChatClient chatClient;
 
-    public ChatController(ChatClient.Builder chatClientBuilder, ChatMemory chatMemory) {
-        this.chatClient = chatClientBuilder
-                .defaultAdvisors(MessageChatMemoryAdvisor.builder(chatMemory).build())
-                .build();
+    private final ToolCallback[] toolCallbacks;
+
+    public ChatController(ChatClient chatClient, @Qualifier("chatToolCallbacks") ToolCallback[] toolCallbacks) {
+        this.chatClient = chatClient;
+        this.toolCallbacks = toolCallbacks;
     }
 
-    public record ChatRequest(String conversationId, String content) {
+    public record ChatRequest(String conversationId, String content, Boolean useTools) {
+
+        // 调用方不写 useTools 就是 true：工具照常带上，只有显式传 false 才摘掉
+        public boolean attachTools() {
+            return useTools == null || useTools;
+        }
     }
 
     @PostMapping
     public Map<String, Object> chat(@RequestBody ChatRequest request) {
         requireValid(request);
-        String reply = chatClient.prompt()
-                .user(request.content())
-                .advisors(advisor -> advisor.param(ChatMemory.CONVERSATION_ID, request.conversationId()))
-                .call()
-                .content();
+        String reply = prompt(request).call().content();
         return Map.of("conversationId", request.conversationId(), "reply", reply);
     }
 
@@ -47,11 +50,19 @@ public class ChatController {
     public Flux<String> chatStream(@RequestBody ChatRequest request) {
         // Validation happens before the stream starts, so failures can still be plain 400s
         requireValid(request);
-        return chatClient.prompt()
+        return prompt(request).stream().content();
+    }
+
+    private ChatClient.ChatClientRequestSpec prompt(ChatRequest request) {
+        ChatClient.ChatClientRequestSpec spec = chatClient.prompt()
                 .user(request.content())
-                .advisors(advisor -> advisor.param(ChatMemory.CONVERSATION_ID, request.conversationId()))
-                .stream()
-                .content();
+                .toolContext(Map.of(ChatMemory.CONVERSATION_ID, request.conversationId()))
+                // 记忆 advisor 的参数不会自动进 ToolContext，会话 id 要显式带过去
+                .advisors(advisor -> advisor.param(ChatMemory.CONVERSATION_ID, request.conversationId()));
+        if (request.attachTools()) {
+            spec.tools((Object[]) toolCallbacks);
+        }
+        return spec;
     }
 
     private static void requireValid(ChatRequest request) {

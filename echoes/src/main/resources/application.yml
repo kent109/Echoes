@@ -24,4 +24,4 @@ spring:
       base-url: ${OPENAI_BASE_URL:https://open.bigmodel.cn/api/paas/v4}
       api-key: ${OPENAI_API_KEY:}
       chat:
-        model: ${OPENAI_MODEL:glm-4-flash}
+        model: ${OPENAI_MODEL:glm-4.7-flash}
