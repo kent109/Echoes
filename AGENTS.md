@@ -43,6 +43,18 @@ Windows 上设置方式：`setx OPENAI_API_KEY "..."`（只对之后新起的进
 
 会话 id 从 `ToolContext` 取，键沿用 `ChatMemory.CONVERSATION_ID`，必须由调用方 `.toolContext(Map)` 显式传——`DefaultToolCallingManager.buildToolContext()` 只读 `ToolCallingChatOptions.getToolContext()`，advisor 参数不会合并进来。这个键会原样进 `ToolContext` 但不会出到网络请求：`OpenAiChatOptions` 只在 `mutate()` 复制它，不进 `ChatCompletionRequest`。要是以后需要把记忆里的工具摘要与真实 `TOOL` 行对上，就得自配键名。
 
+### okhttp changelog 知识库
+
+数据源是官方 changelog `https://lysine.dev/okhttp/changelogs/changelog/`。它不是第三方镜像：`square/okhttp` 仓库已改名迁移，`api.github.com/repos/square/okhttp` 现在返回 301 指向 `lysine-dev/okhttp`，其 homepage 就是 lysine.dev。本机连不通 `raw.githubusercontent.com`，抓取只能走这个网页（MkDocs 结构，条目是 `<li>`，按开头 `New:/Fix:/Breaking:/Upgrade:/Changed:` 分类）。
+
+表 `okhttp_changelog_entry` 一行一条目，`content_hash = sha256(version|kind|text_en)` 上有唯一约束，同步只插新行，重复抓取不会产生副本。写路径只有 `OkhttpChangelogSyncService`（抓取 → 解析 → 比对 → 回写 → 按 kind 统计并打日志），读路径（`OkhttpChangelogQueryService`、`/api/rag/okhttp5`、工具 `query_okhttp5_info`）一律只读库不联网。
+
+翻译在入库时做：另建一个 `ChatClient.builder(chatModel).build()`，不能带任何 advisor，否则这些系统提示会写进用户的会话记忆。每 20 条一批、要求模型按编号回吐；条数不匹配（多为提供方 429）就整批留空并中断，下次同步再补。输出中文优先、缺译文回落英文原文，`translated` 字段标记状态。
+
+`@Scheduled` 在启动 30 秒后跑第一次，间隔由 `rag.okhttp.sync-interval-ms`（默认 6 小时）控制；`sync()` 内有 `AtomicBoolean` 互斥，定时任务与 `POST /api/rag/okhttp5/sync` 撞车时后者返回 409。调度线程池默认只有 1 个线程，本项目已用 `spring.task.scheduling.pool.size: 2` 加余量：同步里的模型调用会长时间阻塞（实测首轮 120 条翻译跑了约 5 分钟，期间日志只在结束时打一行），线程不够时后续定时任务只能排队。
+
+工具 `query_okhttp5_info(version, kind)` 两个参数都可空，全空是 29 个版本 180 条约 1.4 万字符，所以工具描述里明确劝模型按需过滤；结果写进记忆时仍会被截到 500 字符。
+
 ## 运行时约束
 
 框架是 Spring Boot 4.1.2 + Java 25，其自身 jar 是 class file 61（最低 JRE 17），这一点无法通过编译参数绕过。

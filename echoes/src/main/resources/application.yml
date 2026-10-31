@@ -12,6 +12,11 @@ spring:
     hibernate:
       ddl-auto: update
     open-in-view: false
+  task:
+    scheduling:
+      # 默认只有 1 个线程；changelog 同步里的模型调用会长时间占住它，加一个余量
+      pool:
+        size: 2
   ai:
     model:
       chat: ${AI_CHAT_MODEL:openai}
@@ -25,3 +30,8 @@ spring:
       api-key: ${OPENAI_API_KEY:}
       chat:
         model: ${OPENAI_MODEL:glm-4.7-flash}
+
+# okhttp changelog 同步：启动 30 秒后跑第一次，之后按这个间隔（毫秒）重复
+rag:
+  okhttp:
+    sync-interval-ms: 21600000

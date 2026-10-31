@@ -2,6 +2,7 @@ package com.gemform.be.echoes.config;
 
 import com.gemform.be.echoes.tool.EchoTool;
 import com.gemform.be.echoes.tool.MemoryRecordingTools;
+import com.gemform.be.echoes.rag.OkhttpChangelogQueryService;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.client.advisor.MessageChatMemoryAdvisor;
 import org.springframework.ai.chat.memory.ChatMemory;
@@ -14,8 +15,9 @@ public class ChatClientConfiguration {
 
     // 工具清单只在这里组装：加新工具就在本方法入参和 wrap(...) 里各加一项
     @Bean("chatToolCallbacks")
-    ToolCallback[] chatToolCallbacks(ChatMemory chatMemory, EchoTool echoTool) {
-        return MemoryRecordingTools.wrap(chatMemory, echoTool);
+    ToolCallback[] chatToolCallbacks(ChatMemory chatMemory, EchoTool echoTool,
+            OkhttpChangelogQueryService okhttpChangelogQueryService) {
+        return MemoryRecordingTools.wrap(chatMemory, echoTool, okhttpChangelogQueryService);
     }
 
     @Bean
